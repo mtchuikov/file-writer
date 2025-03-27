@@ -23,9 +23,14 @@ type testUtilsSuite struct {
 }
 
 func TestUtilsSuite(t *testing.T) {
+	var writer bytes.Buffer
+	wc := &writeCounter{wr: &writer}
+
 	fw := &FileWriter{
 		mode:  defaulFileMode,
 		flags: defaulFileFlags,
+		wc:    wc,
+		buf:   bufio.NewWriter(wc),
 	}
 
 	tu := &testUtilsSuite{
@@ -45,6 +50,12 @@ func TestUtilsSuite(t *testing.T) {
 	}
 
 	suite.Run(t, tu)
+}
+
+func (tu *testUtilsSuite) SetupTest() {
+	var writer bytes.Buffer
+	tu.fw.wc = &writeCounter{wr: &writer}
+	tu.fw.buf = bufio.NewWriter(tu.fw.wc)
 }
 
 func (tu *testUtilsSuite) TearDownSuite() {
@@ -91,44 +102,31 @@ func (tu *testUtilsSuite) TestSetBufWriter() {
 	)
 }
 
-// func (tu *testUtilsSuite) TestRotateFile() {
-// 	file, err := openFileFn(tu.fileName, tu.fw.flags, tu.fw.mode)
+func (tu *testUtilsSuite) TestRotateFile() {
+	file, err := openFileFn(tu.fileName, tu.fw.flags, tu.fw.mode)
+	msg := "expected no error when oppening file, got '%v'"
+	tu.Require().NoError(err, msg, err)
 
-// 	msg := "expected no error when oppening file, got '%v'"
-// 	tu.Require().NoError(err, msg, err)
+	tu.fw.file = file
 
-// 	tu.fw.file = file
+	tu.fw.buf.Write(tu.filePayload)
+	tu.fw.rotateFile()
 
-// 	var writer bytes.Buffer
-// 	wc := &writeCounter{wr: &writer}
+	exists, err := tu.afs.Exists(tu.fileName + ".")
 
-// 	tu.fw.wc = wc
-// 	tu.fw.buf = bufio.NewWriter(tu.fw.wc)
+	msg = "expected no error when checking backup file existence, got '%v'"
+	tu.Require().NoError(err, msg, err)
+	tu.Require().True(exists, "expected backup file to be exist")
 
-// 	tu.fw.buf.Write(tu.filePayload)
-// 	tu.fw.rotateFile()
+	exists, err = tu.afs.Exists(tu.fileName)
 
-// 	exists, err := tu.afs.Exists(tu.fileName + ".")
-
-// 	msg = "expected no error when checking backup file existence, got '%v'"
-// 	tu.Require().NoError(err, msg, err)
-// 	tu.Require().True(exists, "expected backup file to be exist")
-
-// 	exists, err = tu.afs.Exists(tu.fileName)
-
-// 	msg = "expected no error when checking file existence, got '%v'"
-// 	tu.Require().NoError(err, msg, err)
-// 	tu.Require().True(exists, "expected file to be exist")
-// }
+	msg = "expected no error when checking file existence, got '%v'"
+	tu.Require().NoError(err, msg, err)
+	tu.Require().True(exists, "expected file to be exist")
+}
 
 func (tu *testUtilsSuite) TestFlushBuf() {
 	tu.fw.size = tu.fileSize
-
-	var writer bytes.Buffer
-	wc := &writeCounter{wr: &writer}
-
-	tu.fw.wc = wc
-	tu.fw.buf = bufio.NewWriter(tu.fw.wc)
 
 	tu.fw.buf.Write(tu.filePayload)
 	err := tu.fw.flushBuf()

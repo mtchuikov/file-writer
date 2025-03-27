@@ -10,7 +10,7 @@ TODO:
 
 ## Example of usage
 
-file-writer can be integrated with popular logging libraries. This example shows how to use it with zerolog to log messages to stdout and to a file.
+file-writer can be integrated with popular logging libraries. This example shows how to use it with zerolog to log messages to stdout and to a file:
 
 ```go
 package main

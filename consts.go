@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	// the owner has read, write, and execute permissions, while the
+	// The owner has read, write, and execute permissions, while the
 	// group and others have read and execute permissions only
 	defaulFileMode = 0755
 
@@ -15,32 +15,35 @@ const (
 	// that data is always written at the end of the file
 	defaulFileFlags = os.O_CREATE | os.O_WRONLY | os.O_APPEND
 
+	// Defines the timestamp format that is appended to the file name
+	// after rotation. For example, if the original file name was
+	// "test.log", after rotation with the default postfix, it will be
+	// renamed to "test.log.2006-01-02T15:04:05Z07:00"
 	defaultFileRotatePostfix = time.RFC3339
 
-	// indicates whether log files should be compressed using gzip,
+	// Indicates whether log files should be compressed using gzip,
 	// when set to true, logs will be compressed before being saved to
 	// the file
 	defaulFileCompress = true
 
-	// the maximum size of the log file in bytes, by the default it
-	// equals to 4 MB
+	// The maximum size of the log file in bytes, by the default it
+	// equals to 4_194_304 B or 4 MB
 	defaulFileMaxSize = 4 * 1024 * 1024
 
-	// the maximum number of log entries that can be buffered before
+	// The maximum number of log entries that can be buffered before
 	// the logs are flushed
-	defaulBufMaxBatchSize = 32
+	defaulBufMaxBatchSize = 64
 
-	// the interval at which the log buffer is flushed to disk, helps
+	// The interval at which the log buffer is flushed to disk, helps
 	// to ensure that logs are written periodically even if the batch
 	// size is not reached
 	defaulBufFlushInterval = 10 * time.Second
 )
 
 const (
-	failedToOpenLogFile   = "failed to open log file: %w"
-	failedToRenameLogFile = "failed to rename log file: %w"
-	failedToGetFileStats  = "failed to get file stats: %w"
-	failedToWriteLogFile  = "failed to write log file: %w"
-	failedToFlushLogBuf   = "failed to flush log buffer: %w"
-	failedToRotateLogFile = "failed to rotate log file: %w"
+	failedToOpenLogFile    = "failed to open log file: %w"
+	failedToRenameLogFile  = "failed to rename log file: %w"
+	failedToGetFileStats   = "failed to get file stats: %w"
+	failedToWriteLogFile   = "failed to write log file: %w"
+	failedToFlushLogBuffer = "failed to flush log buffer: %w"
 )

@@ -67,10 +67,7 @@ func NewFileWriter(file string, opts ...Option) (*FileWriter, error) {
 	}
 
 	fw.mu = sync.Mutex{}
-	fw.wc = &writeCounter{
-		wr:    fw.file,
-		count: 0,
-	}
+	fw.wc = &writeCounter{wr: fw.file}
 	fw.buf = bufio.NewWriter(fw.file)
 	fw.batchSize = 0
 	fw.done = make(chan struct{})
@@ -94,6 +91,7 @@ func (fw *FileWriter) Open(file string, mode int) error {
 		return err
 	}
 
+	fw.mode = m
 	fw.setBufWriter(fw.file)
 
 	return nil
@@ -137,7 +135,7 @@ func (fw *FileWriter) Write(p []byte) (int, error) {
 	fw.batchSize++
 	if fw.batchSize >= fw.maxBatchSize {
 		fw.batchSize = 0
-		// flush the buffer without rotating, because after the
+		// Flush the buffer without rotating, because after the
 		// postWriteSize calculation we assume that there will be enough
 		// space after rotation, but in some cases (e.g., when an
 		// excessively large number of bytes is passed), this assumption
@@ -156,7 +154,7 @@ func (fw *FileWriter) Write(p []byte) (int, error) {
 // and the number of bytes buffered. If this total exceeds the
 // maximum allowed size, the log file is rotated. If no error ccurs
 // during rotation, the remaining buffered data is flushed to the
-// file.
+// file
 func (fw *FileWriter) Close() error {
 	fw.mu.Lock()
 	defer func() {

@@ -9,8 +9,8 @@ import (
 	"unsafe"
 )
 
-func (fw *FileWriter) getFileSize() (int64, error) {
-	stat, err := fw.file.Stat()
+func (fw *FileWriter) getFileSize(file file) (int64, error) {
+	stat, err := file.Stat()
 	if err != nil {
 		err = errors.Unwrap(err)
 		return 0, fmt.Errorf(failedToGetFileStats, err)
@@ -21,7 +21,7 @@ func (fw *FileWriter) getFileSize() (int64, error) {
 
 // openFileFn is a wrapper around os.OpenFile that returns a value
 // of type file. This wrapper makes it easier to integrate a
-// function for creating mock files during testing.
+// function for creating mock files during testing
 var openFileFn = func(name string, flag int, mode os.FileMode) (file, error) {
 	return os.OpenFile(name, flag, mode)
 }
@@ -33,14 +33,12 @@ func (fw *FileWriter) openFile(name string, mode os.FileMode) error {
 		return fmt.Errorf(failedToOpenLogFile, err)
 	}
 
-	fw.file = f
-	fw.mode = mode
-
-	size, err := fw.getFileSize()
+	size, err := fw.getFileSize(f)
 	if err != nil {
 		return err
 	}
 
+	fw.file = f
 	fw.size = uint(size)
 
 	return nil
@@ -60,7 +58,7 @@ func (fw *FileWriter) setBufWriter(wr io.Writer) {
 
 // renameFileFn is a wrapper around os.Rename that returns a value
 // renames the file. This wrapper makes it easier to integrate a
-// function for renaming mock files during testing.
+// function for renaming mock files during testing
 var renameFileFn = func(oldpath, newpath string) error {
 	return os.Rename(oldpath, newpath)
 }
@@ -103,12 +101,12 @@ func (fw *FileWriter) flushBuf() error {
 	bufSize := fw.buf.Buffered()
 	err := fw.buf.Flush()
 
-	fw.size += uint(fw.wc.count) - uint(bufSize)
-	fw.wc.count = 0
+	fw.size += uint(fw.wc.flushedBytes) - uint(bufSize)
+	fw.wc.flushedBytes = 0
 
 	if err != nil {
 		err = errors.Unwrap(err)
-		return fmt.Errorf(failedToFlushLogBuf, err)
+		return fmt.Errorf(failedToFlushLogBuffer, err)
 	}
 
 	return nil
