@@ -15,7 +15,7 @@ const (
 	// that data is always written at the end of the file
 	defaulFileFlags = os.O_CREATE | os.O_WRONLY | os.O_APPEND
 
-	defaultFileBackupPostfix = time.RFC3339
+	defaultFileRotatePostfix = time.RFC3339
 
 	// indicates whether log files should be compressed using gzip,
 	// when set to true, logs will be compressed before being saved to
@@ -37,10 +37,10 @@ const (
 )
 
 const (
-	failedToOpenLogFile   = "failed to open log file: %v"
-	failedToRenameLogFile = "failed to rename log file: %v"
-	failedToGetFileStats  = "failed to get file stats: %v"
-	failedToWriteLogFile  = "failed to write log file: %v"
-	failedToFlushLogBuf   = "failed to flush log buffer: %v"
-	failedToRotateLogFile = "failed to rotate log file: %v"
+	failedToOpenLogFile   = "failed to open log file: %w"
+	failedToRenameLogFile = "failed to rename log file: %w"
+	failedToGetFileStats  = "failed to get file stats: %w"
+	failedToWriteLogFile  = "failed to write log file: %w"
+	failedToFlushLogBuf   = "failed to flush log buffer: %w"
+	failedToRotateLogFile = "failed to rotate log file: %w"
 )

@@ -10,35 +10,37 @@ import (
 	"time"
 )
 
-type writeCounter struct {
-	wr    io.Writer
-	count int64
+// file is an interface that simplifies testing code that deals
+// with files. Instead of using a concrete type like *os.File,
+// it's better to substitute stubs or mock objects that don't
+// interact with the real filesystem.
+type file interface {
+	Name() string
+	Write(p []byte) (int, error)
+	Stat() (os.FileInfo, error)
+	Close() error
 }
 
-func (wc *writeCounter) Write(p []byte) (int, error) {
-	n, err := wc.wr.Write(p)
-	wc.count += int64(n)
-	return n, err
-}
+var _ io.WriteCloser = (*FileWriter)(nil)
 
 type FileWriter struct {
 	mu sync.Mutex
 
 	mode          os.FileMode
 	flags         int
-	file          *os.File
-	backupPostfix string
-	compress      bool
-	maxSize       uint
-	size          uint
+	file          file
+	rotatePostfix string // the postfix added to the file name during log rotation
+	compress      bool   // indicates whether the log file should be compressed
+	maxSize       uint   // the maximum allowed size of the log file (in bytes)
+	size          uint   // the current size of the log file + buffer size (in bytes)
 
 	buf          *bufio.Writer
 	wc           *writeCounter
-	maxBatchSize int
-	batchSize    int
+	maxBatchSize int // the maximum number of log entries to accumulate before flushing
+	batchSize    int // the current number of log entries in the buffer
 
-	flushTicker  *time.Ticker
-	errorHandler func(error)
+	flushTicker  *time.Ticker // the time.Ticker that triggers periodic flushes of the buffer
+	errorHandler func(error)  // the function to handle errors that occur during flushing
 	done         chan struct{}
 }
 
@@ -46,7 +48,7 @@ func NewFileWriter(file string, opts ...Option) (*FileWriter, error) {
 	fw := &FileWriter{
 		mode:          defaulFileMode,
 		flags:         defaulFileFlags,
-		backupPostfix: defaultFileBackupPostfix,
+		rotatePostfix: defaultFileRotatePostfix,
 		compress:      defaulFileCompress,
 		maxSize:       defaulFileMaxSize,
 
@@ -59,15 +61,12 @@ func NewFileWriter(file string, opts ...Option) (*FileWriter, error) {
 		opt(fw)
 	}
 
-	f, size, err := fw.openFile(file, fw.mode)
+	err := fw.openFile(file, fw.mode)
 	if err != nil {
 		return nil, err
 	}
 
 	fw.mu = sync.Mutex{}
-	fw.file = f
-	fw.size = size
-
 	fw.wc = &writeCounter{
 		wr:    fw.file,
 		count: 0,
@@ -77,14 +76,6 @@ func NewFileWriter(file string, opts ...Option) (*FileWriter, error) {
 	fw.done = make(chan struct{})
 
 	return fw, nil
-}
-
-func (fw *FileWriter) Size() (uint, uint) {
-	return fw.size, uint(fw.buf.Buffered())
-}
-
-func (fw *FileWriter) BatchSize() int {
-	return fw.batchSize
 }
 
 // Open opens a new log file with the specified name, using the
@@ -98,16 +89,12 @@ func (fw *FileWriter) Open(file string, mode int) error {
 	defer fw.mu.Unlock()
 
 	m := os.FileMode(mode)
-	f, size, err := fw.openFile(file, m)
+	err := fw.openFile(file, m)
 	if err != nil {
 		return err
 	}
 
-	fw.mode = m
-	fw.file = f
-	fw.size = size
-
-	fw.setBufWriter(f)
+	fw.setBufWriter(fw.file)
 
 	return nil
 }
@@ -162,18 +149,14 @@ func (fw *FileWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-func (fw *FileWriter) Flush() error {
-	fw.mu.Lock()
-	defer fw.mu.Unlock()
-	return fw.flushBuf()
-}
-
-func (fw *FileWriter) Rotate() error {
-	fw.mu.Lock()
-	defer fw.mu.Unlock()
-	return fw.rotateFile()
-}
-
+// Close terminates the FileWriter by stopping the periodic flush
+// ticker, closing the done channel, and then ensuring that any
+// buffered log data is properly handled before the file is closed.
+// It calculates the total size as the sum of the current file size
+// and the number of bytes buffered. If this total exceeds the
+// maximum allowed size, the log file is rotated. If no error ccurs
+// during rotation, the remaining buffered data is flushed to the
+// file.
 func (fw *FileWriter) Close() error {
 	fw.mu.Lock()
 	defer func() {

@@ -13,7 +13,7 @@ func WithFileWriterFileMode(mode int) Option {
 	}
 }
 
-func WithFileWriterMaxSize(size int) Option {
+func WithFileWriterMaxSize(size float64) Option {
 	return func(fw *FileWriter) {
 		fw.maxSize = uint(size * 1024 * 1024)
 	}
