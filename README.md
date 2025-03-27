@@ -3,8 +3,8 @@
 file-writer provides a wrapper for writing logs to a file. It writes data to an in-memory buffer and then writes to disk in batches, which helps optimize performance. Additionally, the library allows for log file rotation based on size, compressing older files using the gzip algorithm.
 
 TODO:
-	- [ ] Cover the code with tests
-	- [ ] Add more examples
+- [ ] Cover the code with tests
+- [ ] Add more examples
 
 ## Example of usage
 
