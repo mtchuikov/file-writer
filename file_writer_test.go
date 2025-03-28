@@ -33,11 +33,12 @@ func TestFileWriterSuite(t *testing.T) {
 		buf:   bufio.NewWriter(wc),
 	}
 
+	filePayload := []byte("Hello, world!\n")
 	tf := &testFileWriter{
 		afs:         &afero.Afero{Fs: afero.NewMemMapFs()},
 		fileName:    "test.log",
-		filePayload: []byte("Hello, world!\n"),
-		fileSize:    14,
+		filePayload: filePayload,
+		fileSize:    uint(len(filePayload)),
 		fw:          fw,
 	}
 

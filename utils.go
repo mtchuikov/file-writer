@@ -56,12 +56,19 @@ func (fw *FileWriter) setBufWriter(wr io.Writer) {
 	*wrPtr = wr
 }
 
-// renameFileFn is a wrapper around os.Rename that returns a value
-// renames the file. This wrapper makes it easier to integrate a
-// function for renaming mock files during testing
-var renameFileFn = func(oldpath, newpath string) error {
-	return os.Rename(oldpath, newpath)
-}
+var (
+	// renameFileFn is a wrapper around os.Rename that returns a value
+	// renames the file. This wrapper makes it easier to integrate a
+	// function for renaming mock files during testing
+	renameFileFn = func(oldpath, newpath string) error {
+		return os.Rename(oldpath, newpath)
+	}
+
+	// currentTime is a variable that holds the function for obtaining
+	// the current time. It is extracted into a variable to facilitate
+	// testing, allowing it to be replaced with a mock function.
+	currentTime = time.Now
+)
 
 // rotate performs log file rotation. It closes the current log
 // file, renames it with a timestamp postfix, and opens a new
@@ -73,7 +80,7 @@ func (fw *FileWriter) rotateFile() error {
 	name := fw.file.Name()
 	fw.file.Close()
 
-	postfix := time.Now().Format(fw.rotatePostfix)
+	postfix := currentTime().Format(fw.rotatePostfix)
 	backupName := name + "." + postfix
 
 	err := renameFileFn(name, backupName)
@@ -110,4 +117,20 @@ func (fw *FileWriter) flushBuf() error {
 	}
 
 	return nil
+}
+
+func (fw *FileWriter) rotateAndFlush() error {
+	bufSize := uint(fw.buf.Buffered())
+	size := fw.size + bufSize
+
+	var err error
+	if size > fw.maxSize {
+		err = fw.rotateFile()
+	}
+
+	if err == nil {
+		fw.flushBuf()
+	}
+
+	return err
 }

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/suite"
@@ -27,17 +28,19 @@ func TestUtilsSuite(t *testing.T) {
 	wc := &writeCounter{wr: &writer}
 
 	fw := &FileWriter{
-		mode:  defaulFileMode,
-		flags: defaulFileFlags,
-		wc:    wc,
-		buf:   bufio.NewWriter(wc),
+		mode:          defaulFileMode,
+		flags:         defaulFileFlags,
+		rotatePostfix: defaultFileRotatePostfix,
+		wc:            wc,
+		buf:           bufio.NewWriter(wc),
 	}
 
+	filePayload := []byte("Hello, world!\n")
 	tu := &testUtilsSuite{
 		afs:         &afero.Afero{Fs: afero.NewMemMapFs()},
 		fileName:    "test.log",
-		filePayload: []byte("Hello, world!\n"),
-		fileSize:    14,
+		filePayload: filePayload,
+		fileSize:    uint(len(filePayload)),
 		fw:          fw,
 	}
 
@@ -108,11 +111,17 @@ func (tu *testUtilsSuite) TestRotateFile() {
 	tu.Require().NoError(err, msg, err)
 
 	tu.fw.file = file
-
 	tu.fw.buf.Write(tu.filePayload)
+
+	now := time.Now()
+	currentTime = func() time.Time { return now }
+
 	tu.fw.rotateFile()
 
-	exists, err := tu.afs.Exists(tu.fileName + ".")
+	postfix := now.Format(tu.fw.rotatePostfix)
+	backupName := tu.fileName + "." + postfix
+
+	exists, err := tu.afs.Exists(backupName)
 
 	msg = "expected no error when checking backup file existence, got '%v'"
 	tu.Require().NoError(err, msg, err)

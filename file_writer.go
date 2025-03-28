@@ -44,6 +44,26 @@ type FileWriter struct {
 	done         chan struct{}
 }
 
+func (fw *FileWriter) runTicker() {
+	if fw.flushTicker == nil {
+		return
+	}
+
+	go func() {
+		for {
+			select {
+			case <-fw.done:
+				return
+			case <-fw.flushTicker.C:
+				fw.batchSize = 0
+
+				err := fw.rotateAndFlush()
+				fw.errorHandler(err)
+			}
+		}
+	}()
+}
+
 func NewFileWriter(file string, opts ...Option) (*FileWriter, error) {
 	fw := &FileWriter{
 		mode:          defaulFileMode,
@@ -69,8 +89,11 @@ func NewFileWriter(file string, opts ...Option) (*FileWriter, error) {
 	fw.mu = sync.Mutex{}
 	fw.wc = &writeCounter{wr: fw.file}
 	fw.buf = bufio.NewWriter(fw.file)
+
 	fw.batchSize = 0
 	fw.done = make(chan struct{})
+
+	fw.runTicker()
 
 	return fw, nil
 }
@@ -93,6 +116,9 @@ func (fw *FileWriter) Open(file string, mode int) error {
 
 	fw.mode = m
 	fw.setBufWriter(fw.file)
+	fw.done = make(chan struct{})
+
+	fw.runTicker()
 
 	return nil
 }
@@ -165,17 +191,5 @@ func (fw *FileWriter) Close() error {
 	fw.flushTicker.Stop()
 	close(fw.done)
 
-	bufSize := uint(fw.buf.Buffered())
-	size := fw.size + bufSize
-
-	var err error
-	if size > fw.maxSize {
-		err = fw.rotateFile()
-	}
-
-	if err == nil {
-		fw.flushBuf()
-	}
-
-	return err
+	return fw.rotateAndFlush()
 }

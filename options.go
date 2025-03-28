@@ -27,6 +27,11 @@ func WithFileWriterCompress(compress bool) Option {
 
 func WithFileWriterFlushInterval(interval time.Duration) Option {
 	return func(fw *FileWriter) {
+		if interval == 0 {
+			fw.flushTicker = nil
+			return
+		}
+
 		fw.flushTicker = time.NewTicker(interval)
 	}
 }
