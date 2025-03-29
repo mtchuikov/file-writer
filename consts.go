@@ -15,6 +15,8 @@ const (
 	// that data is always written at the end of the file
 	defaulFileFlags = os.O_CREATE | os.O_WRONLY | os.O_APPEND
 
+	defaultFileDeleteOld = false
+
 	// Defines the timestamp format that is appended to the file name
 	// after rotation. For example, if the original file name was
 	// "test.log", after rotation with the default postfix, it will be
@@ -41,9 +43,10 @@ const (
 )
 
 const (
-	failedToOpenLogFile    = "failed to open log file: %w"
-	failedToRenameLogFile  = "failed to rename log file: %w"
-	failedToGetFileStats   = "failed to get file stats: %w"
-	failedToWriteLogFile   = "failed to write log file: %w"
-	failedToFlushLogBuffer = "failed to flush log buffer: %w"
+	failedToOpenLogFile    = "failed to open log file: %s"
+	failedToRenameLogFile  = "failed to rename log file: %s"
+	failedToGetFileStats   = "failed to get file stats: %s"
+	failedToWriteLogFile   = "failed to write log file: %s"
+	failedToRemoveLogFile  = "failed to remove log file: %s"
+	failedToFlushLogBuffer = "failed to flush log buffer: %s"
 )

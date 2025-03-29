@@ -26,74 +26,83 @@ var _ io.WriteCloser = (*FileWriter)(nil)
 type FileWriter struct {
 	mu sync.Mutex
 
-	mode          os.FileMode
-	flags         int
-	file          file
-	rotatePostfix string // the postfix added to the file name during log rotation
-	compress      bool   // indicates whether the log file should be compressed
-	maxSize       uint   // the maximum allowed size of the log file (in bytes)
-	size          uint   // the current size of the log file + buffer size (in bytes)
+	Mode          os.FileMode
+	Flags         int
+	File          file
+	DeleteOld     bool   // indicates whether the old log file should be removed after rotation
+	RotatePostfix string // the postfix added to the file name during log rotation
+	Compress      bool   // indicates whether the log file should be compressed
+	MaxSize       uint   // the maximum allowed size of the log file (in bytes)
+	Size          uint   // the current size of the log file + buffer size (in bytes)
 
-	buf          *bufio.Writer
-	wc           *writeCounter
-	maxBatchSize int // the maximum number of log entries to accumulate before flushing
-	batchSize    int // the current number of log entries in the buffer
+	Buf          *bufio.Writer
+	Wc           *writeCounter
+	MaxBatchSize int // the maximum number of log entries to accumulate before flushing
+	BatchSize    int // the current number of log entries in the buffer
 
-	flushTicker  *time.Ticker // the time.Ticker that triggers periodic flushes of the buffer
-	errorHandler func(error)  // the function to handle errors that occur during flushing
-	done         chan struct{}
+	// the time.Ticker that triggers periodic flushes of the buffer
+	FlushTicker *time.Ticker
+	// the function to handle errors that occur during flushing
+	ErrorHandler func(fw *FileWriter, err error)
+	Done         chan struct{}
 }
 
-func (fw *FileWriter) runTicker() {
-	if fw.flushTicker == nil {
-		return
-	}
+// func (fw *FileWriter) runTicker() {
+// 	if fw.FlushTicker == nil {
+// 		return
+// 	}
 
-	go func() {
-		for {
-			select {
-			case <-fw.done:
-				return
-			case <-fw.flushTicker.C:
-				fw.batchSize = 0
+// 	go func() {
+// 		for {
+// 			select {
+// 			case <-fw.Done:
+// 				return
+// 			case <-fw.FlushTicker.C:
+// 				fw.mu.Lock()
+// 				fw.BatchSize = 0
 
-				err := fw.rotateAndFlush()
-				fw.errorHandler(err)
-			}
-		}
-	}()
-}
+// 				bufSize := uint(fw.Buf.Buffered())
+// 				size := fw.Size + bufSize
+
+// 				err := fw.rotateAndFlush(size)
+// 				fw.ErrorHandler(fw, err)
+// 				fw.mu.Unlock()
+// 			}
+// 		}
+// 	}()
+// }
 
 func NewFileWriter(file string, opts ...Option) (*FileWriter, error) {
 	fw := &FileWriter{
-		mode:          defaulFileMode,
-		flags:         defaulFileFlags,
-		rotatePostfix: defaultFileRotatePostfix,
-		compress:      defaulFileCompress,
-		maxSize:       defaulFileMaxSize,
+		Mode:          defaulFileMode,
+		Flags:         defaulFileFlags,
+		DeleteOld:     defaultFileDeleteOld,
+		RotatePostfix: defaultFileRotatePostfix,
+		Compress:      defaulFileCompress,
+		MaxSize:       defaulFileMaxSize,
 
-		maxBatchSize: defaulBufMaxBatchSize,
-		flushTicker:  time.NewTicker(defaulBufFlushInterval),
-		errorHandler: func(err error) {},
+		MaxBatchSize: defaulBufMaxBatchSize,
+		FlushTicker:  time.NewTicker(defaulBufFlushInterval),
+		ErrorHandler: func(fw *FileWriter, err error) {},
 	}
 
 	for _, opt := range opts {
 		opt(fw)
 	}
 
-	err := fw.openFile(file, fw.mode)
+	err := fw.openFile(file, fw.Mode)
 	if err != nil {
 		return nil, err
 	}
 
 	fw.mu = sync.Mutex{}
-	fw.wc = &writeCounter{wr: fw.file}
-	fw.buf = bufio.NewWriter(fw.file)
+	fw.Wc = &writeCounter{wr: fw.File}
+	fw.Buf = bufio.NewWriter(fw.Wc)
 
-	fw.batchSize = 0
-	fw.done = make(chan struct{})
+	fw.BatchSize = 0
+	fw.Done = make(chan struct{})
 
-	fw.runTicker()
+	// fw.runTicker()
 
 	return fw, nil
 }
@@ -114,11 +123,11 @@ func (fw *FileWriter) Open(file string, mode int) error {
 		return err
 	}
 
-	fw.mode = m
-	fw.setBufWriter(fw.file)
-	fw.done = make(chan struct{})
+	fw.Mode = m
+	fw.setBufWriter(fw.File)
+	fw.Done = make(chan struct{})
 
-	fw.runTicker()
+	// fw.runTicker()
 
 	return nil
 }
@@ -135,11 +144,13 @@ func (fw *FileWriter) Write(p []byte) (int, error) {
 	defer fw.mu.Unlock()
 
 	pSize := uint(len(p))
-	size := fw.size + pSize
+	bufSize := uint(fw.Buf.Buffered())
+	afterWriteSize := fw.Size + pSize + bufSize
 
 	var err error
-	if size >= fw.maxSize {
-		fw.batchSize = 0
+	if afterWriteSize >= fw.MaxSize {
+		fw.BatchSize = 0
+
 		err = fw.rotateFile()
 		if err != nil {
 			return 0, err
@@ -149,18 +160,19 @@ func (fw *FileWriter) Write(p []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
+
+		return 0, nil
 	}
 
-	n, err := fw.buf.Write(p)
-	fw.size += uint(n)
+	n, err := fw.Buf.Write(p)
 	if err != nil {
 		err = errors.Unwrap(err)
 		return n, fmt.Errorf(failedToWriteLogFile, err)
 	}
 
-	fw.batchSize++
-	if fw.batchSize >= fw.maxBatchSize {
-		fw.batchSize = 0
+	fw.BatchSize++
+	if fw.BatchSize >= fw.MaxBatchSize {
+		fw.BatchSize = 0
 		// Flush the buffer without rotating, because after the
 		// postWriteSize calculation we assume that there will be enough
 		// space after rotation, but in some cases (e.g., when an
@@ -184,12 +196,27 @@ func (fw *FileWriter) Write(p []byte) (int, error) {
 func (fw *FileWriter) Close() error {
 	fw.mu.Lock()
 	defer func() {
-		fw.file.Close()
+		fw.File.Close()
 		fw.mu.Unlock()
 	}()
 
-	fw.flushTicker.Stop()
-	close(fw.done)
+	fw.FlushTicker.Stop()
+	close(fw.Done)
 
-	return fw.rotateAndFlush()
+	bufSize := uint(fw.Buf.Buffered())
+	afterWriteSize := fw.Size + bufSize
+
+	var err error
+	if afterWriteSize >= fw.MaxSize {
+		err = fw.rotateFile()
+		if err != nil {
+			return err
+		}
+	}
+
+	if err == nil {
+		err = fw.flushBuf()
+	}
+
+	return err
 }

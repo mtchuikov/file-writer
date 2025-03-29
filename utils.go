@@ -27,7 +27,7 @@ var openFileFn = func(name string, flag int, mode os.FileMode) (file, error) {
 }
 
 func (fw *FileWriter) openFile(name string, mode os.FileMode) error {
-	f, err := openFileFn(name, fw.flags, mode)
+	f, err := openFileFn(name, fw.Flags, mode)
 	if err != nil {
 		err = errors.Unwrap(err)
 		return fmt.Errorf(failedToOpenLogFile, err)
@@ -38,8 +38,8 @@ func (fw *FileWriter) openFile(name string, mode os.FileMode) error {
 		return err
 	}
 
-	fw.file = f
-	fw.size = uint(size)
+	fw.File = f
+	fw.Size = uint(size)
 
 	return nil
 }
@@ -51,12 +51,16 @@ func (fw *FileWriter) openFile(name string, mode os.FileMode) error {
 // avoid having to call Reset method of the bufio.Writer when
 // rotating the file
 func (fw *FileWriter) setBufWriter(wr io.Writer) {
-	bufPtr := unsafe.Pointer(fw.buf)
+	bufPtr := unsafe.Pointer(fw.Buf)
 	wrPtr := (*io.Writer)(unsafe.Pointer(uintptr(bufPtr) + bufWriterFieldOffset))
 	*wrPtr = wr
 }
 
 var (
+	removeFileFn = func(name string) error {
+		return os.Remove(name)
+	}
+
 	// renameFileFn is a wrapper around os.Rename that returns a value
 	// renames the file. This wrapper makes it easier to integrate a
 	// function for renaming mock files during testing
@@ -77,39 +81,46 @@ var (
 // account the size of the newly created file, cause it assumed to
 // be empty
 func (fw *FileWriter) rotateFile() error {
-	name := fw.file.Name()
-	fw.file.Close()
+	name := fw.File.Name()
+	fw.File.Close()
 
-	postfix := currentTime().Format(fw.rotatePostfix)
-	backupName := name + "." + postfix
+	if fw.DeleteOld {
+		err := removeFileFn(name)
+		if err != nil {
+			err = errors.Unwrap(err)
+			return fmt.Errorf(failedToRemoveLogFile, err)
+		}
+	} else {
+		postfix := currentTime().Format(fw.RotatePostfix)
+		backupName := name + "." + postfix
 
-	err := renameFileFn(name, backupName)
-	if err != nil {
-		err = errors.Unwrap(err)
-		return fmt.Errorf(failedToRenameLogFile, err)
+		err := renameFileFn(name, backupName)
+		if err != nil {
+			err = errors.Unwrap(err)
+			return fmt.Errorf(failedToRenameLogFile, err)
+		}
 	}
 
-	f, err := openFileFn(name, fw.flags, fw.mode)
+	f, err := openFileFn(name, fw.Flags, fw.Mode)
 	if err != nil {
 		err = errors.Unwrap(err)
 		return fmt.Errorf(failedToOpenLogFile, err)
 	}
 
-	fw.file = f
-	fw.size = uint(fw.buf.Buffered())
+	fw.File = f
+	fw.Size = 0
 
-	fw.wc.wr = f
-	fw.setBufWriter(fw.wc)
+	fw.Wc.wr = f
+	fw.setBufWriter(fw.Wc)
 
 	return nil
 }
 
 func (fw *FileWriter) flushBuf() error {
-	bufSize := fw.buf.Buffered()
-	err := fw.buf.Flush()
+	err := fw.Buf.Flush()
 
-	fw.size += uint(fw.wc.flushedBytes) - uint(bufSize)
-	fw.wc.flushedBytes = 0
+	fw.Size += fw.Wc.flushedBytes
+	fw.Wc.flushedBytes = 0
 
 	if err != nil {
 		err = errors.Unwrap(err)
@@ -117,20 +128,4 @@ func (fw *FileWriter) flushBuf() error {
 	}
 
 	return nil
-}
-
-func (fw *FileWriter) rotateAndFlush() error {
-	bufSize := uint(fw.buf.Buffered())
-	size := fw.size + bufSize
-
-	var err error
-	if size > fw.maxSize {
-		err = fw.rotateFile()
-	}
-
-	if err == nil {
-		fw.flushBuf()
-	}
-
-	return err
 }

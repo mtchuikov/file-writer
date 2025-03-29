@@ -27,10 +27,10 @@ func TestFileWriterSuite(t *testing.T) {
 	wc := &writeCounter{wr: &writer}
 
 	fw := &FileWriter{
-		mode:  defaulFileMode,
-		flags: defaulFileFlags,
-		wc:    wc,
-		buf:   bufio.NewWriter(wc),
+		Mode:  defaulFileMode,
+		Flags: defaulFileFlags,
+		Wc:    wc,
+		Buf:   bufio.NewWriter(wc),
 	}
 
 	filePayload := []byte("Hello, world!\n")
@@ -55,13 +55,13 @@ func TestFileWriterSuite(t *testing.T) {
 
 func (tf *testFileWriter) SetupTest() {
 	var writer bytes.Buffer
-	tf.fw.wc = &writeCounter{wr: &writer}
-	tf.fw.buf = bufio.NewWriter(tf.fw.wc)
+	tf.fw.Wc = &writeCounter{wr: &writer}
+	tf.fw.Buf = bufio.NewWriter(tf.fw.Wc)
 }
 
 func (tf *testFileWriter) TearDownSuite() {
-	if tf.fw.file != nil {
-		tf.fw.file.Close()
+	if tf.fw.File != nil {
+		tf.fw.File.Close()
 	}
 }
 
@@ -72,7 +72,7 @@ func (tf *testFileWriter) TestOpen() {
 	msg := "expected no error when oppening file, got '%v'"
 	tf.Require().NoError(err, msg, err)
 
-	stat, err := tf.fw.file.Stat()
+	stat, err := tf.fw.File.Stat()
 	msg = "expected no error when getting file stat, got '%v'"
 	tf.Require().NoError(err, msg, err)
 

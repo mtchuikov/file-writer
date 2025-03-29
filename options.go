@@ -9,35 +9,53 @@ type Option func(*FileWriter)
 
 func WithFileWriterFileMode(mode int) Option {
 	return func(fw *FileWriter) {
-		fw.mode = os.FileMode(mode)
+		fw.Mode = os.FileMode(mode)
 	}
 }
 
-func WithFileWriterMaxSize(size float64) Option {
+func WithFileDeleteOld(delete bool) Option {
 	return func(fw *FileWriter) {
-		fw.maxSize = uint(size * 1024 * 1024)
+		fw.DeleteOld = delete
 	}
 }
 
-func WithFileWriterCompress(compress bool) Option {
+func WithFileRotatePostfix(postfix string) Option {
 	return func(fw *FileWriter) {
-		fw.compress = compress
+		fw.RotatePostfix = postfix
 	}
 }
 
-func WithFileWriterFlushInterval(interval time.Duration) Option {
+func WithFileCompress(compress bool) Option {
+	return func(fw *FileWriter) {
+		fw.Compress = compress
+	}
+}
+
+func WithFileMaxSize(size float64) Option {
+	return func(fw *FileWriter) {
+		fw.MaxSize = uint(size * 1024 * 1024)
+	}
+}
+
+func WithLogMaxBatchSize(size int) Option {
+	return func(fw *FileWriter) {
+		fw.MaxBatchSize = size
+	}
+}
+
+func WithLogFlushInterval(interval time.Duration) Option {
 	return func(fw *FileWriter) {
 		if interval == 0 {
-			fw.flushTicker = nil
+			fw.FlushTicker = nil
 			return
 		}
 
-		fw.flushTicker = time.NewTicker(interval)
+		fw.FlushTicker = time.NewTicker(interval)
 	}
 }
 
-func WithFileWriterMaxBatchSize(size int) Option {
+func WithErrorHandler(h func(fw *FileWriter, err error)) Option {
 	return func(fw *FileWriter) {
-		fw.maxBatchSize = size
+		fw.ErrorHandler = h
 	}
 }

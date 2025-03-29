@@ -28,11 +28,11 @@ func TestUtilsSuite(t *testing.T) {
 	wc := &writeCounter{wr: &writer}
 
 	fw := &FileWriter{
-		mode:          defaulFileMode,
-		flags:         defaulFileFlags,
-		rotatePostfix: defaultFileRotatePostfix,
-		wc:            wc,
-		buf:           bufio.NewWriter(wc),
+		Mode:          defaulFileMode,
+		Flags:         defaulFileFlags,
+		RotatePostfix: defaultFileRotatePostfix,
+		Wc:            wc,
+		Buf:           bufio.NewWriter(wc),
 	}
 
 	filePayload := []byte("Hello, world!\n")
@@ -57,40 +57,40 @@ func TestUtilsSuite(t *testing.T) {
 
 func (tu *testUtilsSuite) SetupTest() {
 	var writer bytes.Buffer
-	tu.fw.wc = &writeCounter{wr: &writer}
-	tu.fw.buf = bufio.NewWriter(tu.fw.wc)
+	tu.fw.Wc = &writeCounter{wr: &writer}
+	tu.fw.Buf = bufio.NewWriter(tu.fw.Wc)
 }
 
 func (tu *testUtilsSuite) TearDownSuite() {
-	if tu.fw.file != nil {
-		tu.fw.file.Close()
+	if tu.fw.File != nil {
+		tu.fw.File.Close()
 	}
 }
 
 func (tu *testUtilsSuite) TestGetOpenFile() {
 	tu.afs.WriteFile(tu.fileName, tu.filePayload, defaulFileMode)
 
-	err := tu.fw.openFile(tu.fileName, tu.fw.mode)
+	err := tu.fw.openFile(tu.fileName, tu.fw.Mode)
 
 	msg := "expected no error when oppening file, got '%v'"
 	tu.Require().NoError(err, msg, err)
 
 	tu.Require().Equalf(
-		tu.fileSize, tu.fw.size,
+		tu.fileSize, tu.fw.Size,
 		"expected file name to be '%v', got '%v'",
-		tu.fileSize, tu.fw.size,
+		tu.fileSize, tu.fw.Size,
 	)
 }
 
 func (tu *testUtilsSuite) TestSetBufWriter() {
 	var oldWriter bytes.Buffer
-	tu.fw.buf = bufio.NewWriter(&oldWriter)
+	tu.fw.Buf = bufio.NewWriter(&oldWriter)
 
 	var newWriter bytes.Buffer
 	tu.fw.setBufWriter(&newWriter)
 
-	tu.fw.buf.Write(tu.filePayload)
-	tu.fw.buf.Flush()
+	tu.fw.Buf.Write(tu.filePayload)
+	tu.fw.Buf.Flush()
 
 	tu.Require().Emptyf(
 		oldWriter.Bytes(),
@@ -106,19 +106,19 @@ func (tu *testUtilsSuite) TestSetBufWriter() {
 }
 
 func (tu *testUtilsSuite) TestRotateFile() {
-	file, err := openFileFn(tu.fileName, tu.fw.flags, tu.fw.mode)
+	file, err := openFileFn(tu.fileName, tu.fw.Flags, tu.fw.Mode)
 	msg := "expected no error when oppening file, got '%v'"
 	tu.Require().NoError(err, msg, err)
 
-	tu.fw.file = file
-	tu.fw.buf.Write(tu.filePayload)
+	tu.fw.File = file
+	tu.fw.Buf.Write(tu.filePayload)
 
 	now := time.Now()
 	currentTime = func() time.Time { return now }
 
 	tu.fw.rotateFile()
 
-	postfix := now.Format(tu.fw.rotatePostfix)
+	postfix := now.Format(tu.fw.RotatePostfix)
 	backupName := tu.fileName + "." + postfix
 
 	exists, err := tu.afs.Exists(backupName)
@@ -135,17 +135,17 @@ func (tu *testUtilsSuite) TestRotateFile() {
 }
 
 func (tu *testUtilsSuite) TestFlushBuf() {
-	tu.fw.size = tu.fileSize
+	tu.fw.Size = tu.fileSize
 
-	tu.fw.buf.Write(tu.filePayload)
+	tu.fw.Buf.Write(tu.filePayload)
 	err := tu.fw.flushBuf()
 
 	msg := "expected no error when flushing buffer, got '%v'"
 	tu.Require().NoError(err, msg, err)
 
 	tu.Require().Equalf(
-		tu.fileSize, tu.fw.size,
+		tu.fileSize*2, tu.fw.Size,
 		"expected file size to be equal to '%v', got '%v'",
-		tu.fileSize, tu.fw.size,
+		tu.fileSize, tu.fw.Size,
 	)
 }
