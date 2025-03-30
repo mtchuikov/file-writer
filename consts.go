@@ -13,7 +13,7 @@ const (
 	// os.O_CREATE creates the file if it doesn't exist, os.O_WRONLY
 	// opens the file for write-only access, and os.O_APPEND ensures
 	// that data is always written at the end of the file
-	defaulFileFlags = os.O_CREATE | os.O_WRONLY | os.O_APPEND
+	defaulFileFlags = os.O_CREATE | os.O_RDWR | os.O_APPEND
 
 	defaultFileDeleteOld = false
 
@@ -43,10 +43,11 @@ const (
 )
 
 const (
-	failedToOpenLogFile    = "failed to open log file: %s"
-	failedToRenameLogFile  = "failed to rename log file: %s"
-	failedToGetFileStats   = "failed to get file stats: %s"
-	failedToWriteLogFile   = "failed to write log file: %s"
-	failedToRemoveLogFile  = "failed to remove log file: %s"
-	failedToFlushLogBuffer = "failed to flush log buffer: %s"
+	failedToOpenLogFile     = "failed to open log file: %s"
+	failedToRenameLogFile   = "failed to rename log file: %s"
+	failedToGetFileStats    = "failed to get file stats: %s"
+	failedToWriteLogFile    = "failed to write log file: %s"
+	failedToCompressLogFile = "failed to compress log file: %w"
+	failedToRemoveLogFile   = "failed to remove log file: %s"
+	failedToFlushLogBuffer  = "failed to flush log buffer: %s"
 )

@@ -16,8 +16,10 @@ import (
 // interact with the real filesystem.
 type file interface {
 	Name() string
+	Read(p []byte) (int, error)
 	Write(p []byte) (int, error)
 	Stat() (os.FileInfo, error)
+	Seek(offset int64, whence int) (int64, error)
 	Close() error
 }
 
@@ -47,30 +49,45 @@ type FileWriter struct {
 	Done         chan struct{}
 }
 
-// func (fw *FileWriter) runTicker() {
-// 	if fw.FlushTicker == nil {
-// 		return
-// 	}
+func (fw *FileWriter) runTicker() {
+	if fw.FlushTicker == nil {
+		return
+	}
 
-// 	go func() {
-// 		for {
-// 			select {
-// 			case <-fw.Done:
-// 				return
-// 			case <-fw.FlushTicker.C:
-// 				fw.mu.Lock()
-// 				fw.BatchSize = 0
+	go func() {
+		for {
+			select {
+			case <-fw.Done:
+				return
+			case <-fw.FlushTicker.C:
+				fw.mu.Lock()
 
-// 				bufSize := uint(fw.Buf.Buffered())
-// 				size := fw.Size + bufSize
+				err := func() error {
+					bufSize := uint(fw.Buf.Buffered())
+					afterWriteSize := fw.Size + bufSize
 
-// 				err := fw.rotateAndFlush(size)
-// 				fw.ErrorHandler(fw, err)
-// 				fw.mu.Unlock()
-// 			}
-// 		}
-// 	}()
-// }
+					var err error
+					if afterWriteSize >= fw.MaxSize {
+						err = fw.rotateFile()
+					}
+
+					if err == nil {
+						fw.BatchSize = 0
+						err = fw.flushBuf()
+					}
+
+					return err
+				}()
+
+				if err != nil {
+					fw.ErrorHandler(fw, err)
+				}
+
+				fw.mu.Unlock()
+			}
+		}
+	}()
+}
 
 func NewFileWriter(file string, opts ...Option) (*FileWriter, error) {
 	fw := &FileWriter{
@@ -102,7 +119,7 @@ func NewFileWriter(file string, opts ...Option) (*FileWriter, error) {
 	fw.BatchSize = 0
 	fw.Done = make(chan struct{})
 
-	// fw.runTicker()
+	fw.runTicker()
 
 	return fw, nil
 }
@@ -112,7 +129,7 @@ func NewFileWriter(file string, opts ...Option) (*FileWriter, error) {
 // internal writer to work with the new file. Before calling
 // this function, ensure that the Close method is called to
 // properly close the previous log file and avoid resource
-// leaks or data corruption
+// leaks or data corruption.
 func (fw *FileWriter) Open(file string, mode int) error {
 	fw.mu.Lock()
 	defer fw.mu.Unlock()
@@ -127,7 +144,7 @@ func (fw *FileWriter) Open(file string, mode int) error {
 	fw.setBufWriter(fw.File)
 	fw.Done = make(chan struct{})
 
-	// fw.runTicker()
+	fw.runTicker()
 
 	return nil
 }
@@ -138,7 +155,7 @@ func (fw *FileWriter) Open(file string, mode int) error {
 // data would cause the size to surpass this limit, the log file
 // is rotated and any buffered data is flushed before proceeding.
 // After writing, if the number of batched entries reaches the
-// predefined threshold, the buffer is flushed
+// predefined threshold, the buffer is flushed.
 func (fw *FileWriter) Write(p []byte) (int, error) {
 	fw.mu.Lock()
 	defer fw.mu.Unlock()
@@ -149,8 +166,6 @@ func (fw *FileWriter) Write(p []byte) (int, error) {
 
 	var err error
 	if afterWriteSize >= fw.MaxSize {
-		fw.BatchSize = 0
-
 		err = fw.rotateFile()
 		if err != nil {
 			return 0, err
@@ -161,7 +176,7 @@ func (fw *FileWriter) Write(p []byte) (int, error) {
 			return 0, err
 		}
 
-		return 0, nil
+		fw.BatchSize = 0
 	}
 
 	n, err := fw.Buf.Write(p)
@@ -178,7 +193,7 @@ func (fw *FileWriter) Write(p []byte) (int, error) {
 		// space after rotation, but in some cases (e.g., when an
 		// excessively large number of bytes is passed), this assumption
 		// might not hold; it is the user's responsibility to ensure that
-		// the input size remains within acceptable limits
+		// the input size remains within acceptable limits.
 		err = fw.flushBuf()
 	}
 
@@ -192,7 +207,7 @@ func (fw *FileWriter) Write(p []byte) (int, error) {
 // and the number of bytes buffered. If this total exceeds the
 // maximum allowed size, the log file is rotated. If no error ccurs
 // during rotation, the remaining buffered data is flushed to the
-// file
+// file.
 func (fw *FileWriter) Close() error {
 	fw.mu.Lock()
 	defer func() {
@@ -214,9 +229,5 @@ func (fw *FileWriter) Close() error {
 		}
 	}
 
-	if err == nil {
-		err = fw.flushBuf()
-	}
-
-	return err
+	return fw.flushBuf()
 }

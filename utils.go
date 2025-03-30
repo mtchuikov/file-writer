@@ -7,6 +7,8 @@ import (
 	"os"
 	"time"
 	"unsafe"
+
+	"github.com/klauspost/compress/gzip"
 )
 
 func (fw *FileWriter) getFileSize(file file) (int64, error) {
@@ -21,7 +23,7 @@ func (fw *FileWriter) getFileSize(file file) (int64, error) {
 
 // openFileFn is a wrapper around os.OpenFile that returns a value
 // of type file. This wrapper makes it easier to integrate a
-// function for creating mock files during testing
+// function for creating mock files during testing.
 var openFileFn = func(name string, flag int, mode os.FileMode) (file, error) {
 	return os.OpenFile(name, flag, mode)
 }
@@ -49,11 +51,36 @@ func (fw *FileWriter) openFile(name string, mode os.FileMode) error {
 // its unexported "wr" field. The field offset is defined by
 // bufWriterFieldOffset, which is architecture-dependent. It helps
 // avoid having to call Reset method of the bufio.Writer when
-// rotating the file
+// rotating the file.
 func (fw *FileWriter) setBufWriter(wr io.Writer) {
 	bufPtr := unsafe.Pointer(fw.Buf)
 	wrPtr := (*io.Writer)(unsafe.Pointer(uintptr(bufPtr) + bufWriterFieldOffset))
 	*wrPtr = wr
+}
+
+func (fw *FileWriter) compress(backupName string) error {
+	dest, err := openFileFn(backupName, defaulFileFlags, fw.Mode)
+	if err != nil {
+		return err
+	}
+	defer dest.Close()
+
+	gr := gzip.NewWriter(dest)
+	defer gr.Close()
+
+	// Reset the file pointer to the beginning. Without this,
+	// using the Write method would advance the pointer, causing
+	// subsequent reads to start from the current position rather
+	// than from the beginning.
+	fw.File.Seek(0, 0)
+
+	_, err = io.Copy(gr, fw.File)
+	if err != nil {
+		err = errors.Unwrap(err)
+		return fmt.Errorf(failedToCompressLogFile, err)
+	}
+
+	return nil
 }
 
 var (
@@ -63,7 +90,7 @@ var (
 
 	// renameFileFn is a wrapper around os.Rename that returns a value
 	// renames the file. This wrapper makes it easier to integrate a
-	// function for renaming mock files during testing
+	// function for renaming mock files during testing.
 	renameFileFn = func(oldpath, newpath string) error {
 		return os.Rename(oldpath, newpath)
 	}
@@ -79,26 +106,49 @@ var (
 // one with the original name. It also updates the fw.size field to
 // the size of the data currently buffered, without taking into
 // account the size of the newly created file, cause it assumed to
-// be empty
+// be empty.
 func (fw *FileWriter) rotateFile() error {
 	name := fw.File.Name()
-	fw.File.Close()
 
-	if fw.DeleteOld {
-		err := removeFileFn(name)
-		if err != nil {
-			err = errors.Unwrap(err)
-			return fmt.Errorf(failedToRemoveLogFile, err)
-		}
-	} else {
-		postfix := currentTime().Format(fw.RotatePostfix)
-		backupName := name + "." + postfix
+	err := func() error {
+		defer fw.File.Close()
 
-		err := renameFileFn(name, backupName)
-		if err != nil {
-			err = errors.Unwrap(err)
-			return fmt.Errorf(failedToRenameLogFile, err)
+		var err error
+		if fw.DeleteOld {
+			err = removeFileFn(name)
+			if err != nil {
+				err = errors.Unwrap(err)
+				return fmt.Errorf(failedToRemoveLogFile, err)
+			}
+
+		} else {
+			postfix := currentTime().Format(fw.RotatePostfix)
+			backupName := name + "." + postfix
+
+			if fw.Compress {
+				backupName = backupName + ".gz"
+				err = fw.compress(backupName)
+				if err != nil {
+					removeFileFn(backupName)
+					return err
+				}
+
+				removeFileFn(name)
+
+			} else {
+				err := renameFileFn(name, backupName)
+				if err != nil {
+					err = errors.Unwrap(err)
+					return fmt.Errorf(failedToRenameLogFile, err)
+				}
+			}
 		}
+
+		return nil
+	}()
+
+	if err != nil {
+		return err
 	}
 
 	f, err := openFileFn(name, fw.Flags, fw.Mode)
@@ -109,7 +159,6 @@ func (fw *FileWriter) rotateFile() error {
 
 	fw.File = f
 	fw.Size = 0
-
 	fw.Wc.wr = f
 	fw.setBufWriter(fw.Wc)
 
