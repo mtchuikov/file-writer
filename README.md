@@ -5,7 +5,7 @@ file-writer provides a wrapper for writing logs to a file. It writes data to an 
 TODO:
 - [ ] Cover the code with tests
 - [ ] Add more examples
-- [ ] Add compression of log files using gzip
+- [x] Add compression of log files using gzip
 - [ ] Add flushing of the log buffer using a time.Ticker
 
 ## Example of usage
@@ -39,3 +39,5 @@ func main() {
 		Msg("Hello, world!")
 }
 ```
+
+
