@@ -15,7 +15,7 @@ func (fw *FileWriter) getFileSize(file file) (int64, error) {
 	stat, err := file.Stat()
 	if err != nil {
 		err = errors.Unwrap(err)
-		return 0, fmt.Errorf(failedToGetFileStats, err)
+		return 0, fmt.Errorf(wFailedToGetFileStats, err)
 	}
 
 	return stat.Size(), nil
@@ -32,7 +32,7 @@ func (fw *FileWriter) openFile(name string, mode os.FileMode) error {
 	f, err := openFileFn(name, fw.Flags, mode)
 	if err != nil {
 		err = errors.Unwrap(err)
-		return fmt.Errorf(failedToOpenLogFile, err)
+		return fmt.Errorf(wFailedToOpenLogFile, err)
 	}
 
 	size, err := fw.getFileSize(f)
@@ -77,7 +77,7 @@ func (fw *FileWriter) compress(backupName string) error {
 	_, err = io.Copy(gr, fw.File)
 	if err != nil {
 		err = errors.Unwrap(err)
-		return fmt.Errorf(failedToCompressLogFile, err)
+		return fmt.Errorf(wFailedToCompressLogFile, err)
 	}
 
 	return nil
@@ -118,7 +118,7 @@ func (fw *FileWriter) rotateFile() error {
 			err = removeFileFn(name)
 			if err != nil {
 				err = errors.Unwrap(err)
-				return fmt.Errorf(failedToRemoveLogFile, err)
+				return fmt.Errorf(wFailedToRemoveLogFile, err)
 			}
 
 		} else {
@@ -139,7 +139,7 @@ func (fw *FileWriter) rotateFile() error {
 				err := renameFileFn(name, backupName)
 				if err != nil {
 					err = errors.Unwrap(err)
-					return fmt.Errorf(failedToRenameLogFile, err)
+					return fmt.Errorf(wFailedToRenameLogFile, err)
 				}
 			}
 		}
@@ -154,7 +154,7 @@ func (fw *FileWriter) rotateFile() error {
 	f, err := openFileFn(name, fw.Flags, fw.Mode)
 	if err != nil {
 		err = errors.Unwrap(err)
-		return fmt.Errorf(failedToOpenLogFile, err)
+		return fmt.Errorf(wFailedToOpenLogFile, err)
 	}
 
 	fw.File = f
@@ -173,7 +173,7 @@ func (fw *FileWriter) flushBuf() error {
 
 	if err != nil {
 		err = errors.Unwrap(err)
-		return fmt.Errorf(failedToFlushLogBuffer, err)
+		return fmt.Errorf(wFailedToFlushLogBuffer, err)
 	}
 
 	return nil

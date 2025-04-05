@@ -7,7 +7,7 @@ type writer interface {
 
 // writeCounter wraps an io.Writer and counts the total number of
 // bytes written. It also allows to track the size of the write
-// operations performed when Flush is called on a buffered writer
+// operations performed when Flush is called on a buffered writer.
 type writeCounter struct {
 	wr           writer
 	flushedBytes uint

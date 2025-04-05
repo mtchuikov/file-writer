@@ -47,6 +47,8 @@ type FileWriter struct {
 	// the function to handle errors that occur during flushing
 	ErrorHandler func(fw *FileWriter, err error)
 	Done         chan struct{}
+
+	closeOnce sync.Once
 }
 
 func (fw *FileWriter) runTicker() {
@@ -89,7 +91,7 @@ func (fw *FileWriter) runTicker() {
 	}()
 }
 
-func NewFileWriter(file string, opts ...Option) (*FileWriter, error) {
+func New(file string, opts ...Option) (*FileWriter, error) {
 	fw := &FileWriter{
 		Mode:          defaulFileMode,
 		Flags:         defaulFileFlags,
@@ -101,6 +103,7 @@ func NewFileWriter(file string, opts ...Option) (*FileWriter, error) {
 		MaxBatchSize: defaulBufMaxBatchSize,
 		FlushTicker:  time.NewTicker(defaulBufFlushInterval),
 		ErrorHandler: func(fw *FileWriter, err error) {},
+		closeOnce:    sync.Once{},
 	}
 
 	for _, opt := range opts {
@@ -143,6 +146,7 @@ func (fw *FileWriter) Open(file string, mode int) error {
 	fw.Mode = m
 	fw.setBufWriter(fw.File)
 	fw.Done = make(chan struct{})
+	fw.closeOnce = sync.Once{}
 
 	fw.runTicker()
 
@@ -157,6 +161,10 @@ func (fw *FileWriter) Open(file string, mode int) error {
 // After writing, if the number of batched entries reaches the
 // predefined threshold, the buffer is flushed.
 func (fw *FileWriter) Write(p []byte) (int, error) {
+	if fw.File == nil {
+		return 0, fmt.Errorf(wFailedToWriteLogFile, os.ErrClosed)
+	}
+
 	fw.mu.Lock()
 	defer fw.mu.Unlock()
 
@@ -182,7 +190,7 @@ func (fw *FileWriter) Write(p []byte) (int, error) {
 	n, err := fw.Buf.Write(p)
 	if err != nil {
 		err = errors.Unwrap(err)
-		return n, fmt.Errorf(failedToWriteLogFile, err)
+		return n, fmt.Errorf(wFailedToWriteLogFile, err)
 	}
 
 	fw.BatchSize++
@@ -210,24 +218,30 @@ func (fw *FileWriter) Write(p []byte) (int, error) {
 // file.
 func (fw *FileWriter) Close() error {
 	fw.mu.Lock()
-	defer func() {
-		fw.File.Close()
-		fw.mu.Unlock()
-	}()
-
-	fw.FlushTicker.Stop()
-	close(fw.Done)
-
-	bufSize := uint(fw.Buf.Buffered())
-	afterWriteSize := fw.Size + bufSize
+	defer fw.mu.Unlock()
 
 	var err error
-	if afterWriteSize >= fw.MaxSize {
-		err = fw.rotateFile()
-		if err != nil {
-			return err
+	closeFn := func() {
+		fw.FlushTicker.Stop()
+		close(fw.Done)
+
+		bufSize := uint(fw.Buf.Buffered())
+		afterWriteSize := fw.Size + bufSize
+
+		if afterWriteSize >= fw.MaxSize {
+			err = fw.rotateFile()
+			if err != nil {
+				return
+			}
 		}
+
+		err = fw.flushBuf()
+
+		fw.File.Close()
+		fw.File = nil
 	}
 
-	return fw.flushBuf()
+	fw.closeOnce.Do(closeFn)
+
+	return err
 }
